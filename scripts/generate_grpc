@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -e
+
+cd $(dirname $0)/..
+
+# check and download dependency for gRPC code generate
+if [ ! -e ./proto/vendor/protobuf/src/google/protobuf ]; then
+    rm -rf ./proto/vendor/protobuf/src/google/protobuf
+    DIR="./proto/vendor/protobuf/src/google/protobuf"
+    mkdir -p $DIR
+    wget https://raw.githubusercontent.com/protocolbuffers/protobuf/v24.3/src/google/protobuf/empty.proto -P $DIR
+fi
+
+PY_BUILD_DIR_BASE=".pyprotobuild"
+GO_BUILD_DIR_BASE=".goprotobuild"
+mkdir -p "${PY_BUILD_DIR_BASE}" "${GO_BUILD_DIR_BASE}"
+
+for PROTO in enginerpc imrpc bimrpc smrpc; do
+    for i in pkg/${PROTO}/*.proto; do
+        python3 -m grpc_tools.protoc -I . -I "proto/vendor/" \
+            --python_out="${PY_BUILD_DIR_BASE}" \
+            --grpc_python_out="${PY_BUILD_DIR_BASE}" \
+            $i
+        protoc -I . -I "proto/vendor/" \
+            --go_out="${GO_BUILD_DIR_BASE}" --go_opt=paths=source_relative \
+            --go-grpc_out="${GO_BUILD_DIR_BASE}" --go-grpc_opt=paths=source_relative \
+            $i
+    done
+
+    for i in ${PY_BUILD_DIR_BASE}/pkg/${PROTO}/*.py; do
+        mv $i pkg/${PROTO}/
+    done
+
+    for i in ${GO_BUILD_DIR_BASE}/pkg/${PROTO}/*.go; do
+        mv $i pkg/${PROTO}/
+    done
+done
+
+rm -rf "${PY_BUILD_DIR_BASE}" "${GO_BUILD_DIR_BASE}"
